@@ -136,7 +136,8 @@ func init() {
 	rootCmd.Flags().StringP("password", "p", "", "Password credential for InfluxDB instance")
 	rootCmd.Flags().StringP("database", "b", "gatling", "Database name in InfluxDB")
 	rootCmd.Flags().StringP("log", "l", "./log/g2i.log", "File path to application log file")
-	rootCmd.Flags().StringP("test-id", "t", "", "Unique test identifier")
+	rootCmd.Flags().StringP("test-environment", "t", "", "Test environment identifier")
+	rootCmd.Flags().StringP("system-under-test", "y", "", "System under test")
 	rootCmd.Flags().UintP("stop-timeout", "s", 60, "Time (seconds) to exit if no new log lines found")
 	rootCmd.Flags().UintP("max-batch-size", "m", 5000, "Max points batch size to sent to InfluxDB")
 

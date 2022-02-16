@@ -37,10 +37,11 @@ import (
 )
 
 type testInfo struct {
-	testID         string
-	simulationName string
-	description    string
-	nodeName       string
+	systemUnderTest string
+	testEnvironment string
+	simulationName  string
+	description     string
+	nodeName        string
 	testStartTime  time.Time
 }
 
@@ -67,9 +68,10 @@ var (
 )
 
 // InitTestInfo collect basic test information to be used by Influx client
-func InitTestInfo(testID, simulationName, description, nodeName string, testStartTime time.Time) {
+func InitTestInfo(systemUnderTest, testEnvironment, simulationName, description, nodeName string, testStartTime time.Time) {
 	info = testInfo{
-		testID:         testID,
+		systemUnderTest: systemUnderTest,
+		testEnvironment: testEnvironment,
 		simulationName: simulationName,
 		description:    description,
 		nodeName:       nodeName,
@@ -137,7 +139,8 @@ func sendUserData(m map[string]int, ts time.Time) ([]*client.Point, error) {
 			"users",
 			map[string]string{
 				"scenario": k,
-				"testId":   info.testID,
+				"testEnvironment":   info.testEnvironment,
+				"systemUnderTest":   info.systemUnderTest,
 				"nodeName": info.nodeName,
 			},
 			map[string]interface{}{
@@ -320,7 +323,8 @@ func sendClosingPoint() {
 		map[string]string{
 			"action":     "end",
 			"simulation": info.simulationName,
-			"testId":     info.testID,
+			"testEnvironment":     info.testEnvironment,
+			"systemUnderTest":     info.systemUnderTest,
 			"nodeName":   info.nodeName,
 		},
 		map[string]interface{}{
