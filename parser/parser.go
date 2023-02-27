@@ -48,7 +48,7 @@ import (
 
 const (
 	oneMillisecond        = 1_000_000
-	simulationLogFileName = "simulation.log"
+	// resultsLogFileName = "20230207-afterburner.csv"
 	// Constant amounts of elements per log line
 	runLineLen     = 6
 	requestLineLen = 8
@@ -62,6 +62,7 @@ var (
 	startTime            = time.Now().Unix()
 	nodeName             string
 	gatlingVersion       string
+	resultsLogFileName string
 
 	errFound         = errors.New("Found")
 	errStoppedByUser = errors.New("Process stopped by user")
@@ -84,6 +85,8 @@ var (
     gatlingVersionPattern = regexp.MustCompile(`3\.[5-9]\.[0-9]`)
 
 	parserStopped = make(chan struct{})
+
+	
 )
 
 func lookupTargetDir(ctx context.Context, dir string) error {
@@ -114,6 +117,7 @@ func lookupTargetDir(ctx context.Context, dir string) error {
 
 		abs, _ := filepath.Abs(dir)
 		l.Infof("Target directory found at %s", abs)
+		logDir = abs
 		break
 	}
 
@@ -170,7 +174,19 @@ func lookupResultsDir(ctx context.Context, dir string) error {
 func waitForLog(ctx context.Context) error {
 	const loopTimeout = 5 * time.Second
 
-	l.Infoln("Searching for " + simulationLogFileName + " file...")
+	resultFilePattern := "*.csv"
+	files, err := filepath.Glob(logDir + "/" + resultFilePattern)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return err
+	}
+	if len(files) == 0 {
+		fmt.Println("No results file found matching pattern", resultFilePattern)
+		return err
+	}
+	resultsLogFileName = filepath.Base(files[0])
+
+	l.Infoln("Searching for " + logDir + "/" + resultsLogFileName + " file...")
 	for {
 		// This block checks if stop signal is received from user
 		// and stops further lookup
@@ -180,7 +196,7 @@ func waitForLog(ctx context.Context) error {
 		default:
 		}
 
-		fInfo, err := os.Stat(logDir + "/" + simulationLogFileName)
+		fInfo, err := os.Stat(logDir + "/" + resultsLogFileName)
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -191,12 +207,12 @@ func waitForLog(ctx context.Context) error {
 
 		// WARNING: second part of this check may fail on Windows. Not tested
 		if fInfo.Mode().IsRegular() && (runtime.GOOS == "windows" || fInfo.Mode().Perm() == 420) {
-			abs, _ := filepath.Abs(logDir + "/" + simulationLogFileName)
+			abs, _ := filepath.Abs(logDir + "/" + resultsLogFileName)
 			l.Infof("Found %s\n", abs)
 			break
 		}
 
-		return errors.New("Something wrong happened when attempting to open " + simulationLogFileName)
+		return errors.New("Something wrong happened when attempting to open " + resultsLogFileName)
 	}
 
 	return nil
@@ -248,31 +264,46 @@ func userLineProcess(lb []byte) error {
 func requestLineProcess(lb []byte) error {
 
 
-	split := bytes.Split(lb, []byte(",")
+	split := bytes.Split(lb, []byte(","))
 		if len(split) != 17 {
 			return errors.New("Line contains unexpected amount of values")
 		}
 
-		timestamp, err := timeFromUnixBytes(split[1])
+		timestamp, err := timeFromUnixBytes(split[0])
 		if err != nil {
 			return err
 		}
 
-		point, err := influx.NewPoint(
+		duration, err := strconv.Atoi(string(split[1]))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+		grpThreads, err := strconv.Atoi(string(split[11]))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+		allThreads, err := strconv.Atoi(string(split[12]))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+		requestPoint, err := influx.NewPoint(
 				"requests",
 				map[string]string{
-					"label":       strings.TrimSpace(strings.ReplaceAll(string(split[3]), " ", "_")),
-					// "groups":     strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
-					"success":     string(split[8]),
-					// "simulation": simulationName,
+					"label":       strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
+					"success":     string(split[7]),
 					"systemUnderTest": systemUnderTest,
 					"testEnvironment": testEnvironment,
 					"nodeName":   nodeName,
-					"responseCode": string(split[4]),
-					"failureMessage": string(bytes.TrimSpace(split[9])),
+					"responseCode": string(split[3]),
+					"grpThreads": string(split[11]),
+					"allThreads": string(split[12]),
+					"failureMessage": string(bytes.TrimSpace(split[8])),
 				},
 				map[string]interface{}{
-					"duration":     int(split[2]),
+					"duration":  duration   ,
 				},
 				timestamp,
 			)
@@ -280,11 +311,51 @@ func requestLineProcess(lb []byte) error {
 				return fmt.Errorf("Error creating new point with request data: %w", err)
 			}
 
-			influx.SendPoint(point)
+			influx.SendPoint(requestPoint)
 
+		grpThreadsPoint, err := influx.NewPoint(
+				"groupThreads",
+				map[string]string{
+					"success":     string(split[7]),
+					"threadName":     string(split[5]),
+					"systemUnderTest": systemUnderTest,
+					"testEnvironment": testEnvironment,
+					"nodeName":   nodeName,
+				},
+				map[string]interface{}{
+					"grpThreads":  grpThreads ,
+				},
+				timestamp,
+			)
+			if err != nil {
+				return fmt.Errorf("Error creating new point with request data: %w", err)
+			}
 
+			influx.SendPoint(grpThreadsPoint)
+
+		allThreadsPoint, err := influx.NewPoint(
+				"allThreads",
+				map[string]string{
+					"success":     string(split[7]),
+					"systemUnderTest": systemUnderTest,
+					"testEnvironment": testEnvironment,
+					"nodeName":   nodeName,
+				},
+				map[string]interface{}{
+					"allThreads":  allThreads ,
+				},
+				timestamp,
+			)
+			if err != nil {
+				return fmt.Errorf("Error creating new point with request data: %w", err)
+			}
+
+			influx.SendPoint(allThreadsPoint)	
+			
 	return nil
 }
+
+
 
 func groupLineProcess(lb []byte) error {
 	split := bytes.Split(lb, tabSep)
@@ -521,9 +592,9 @@ func parseStart(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	l.Infoln("Starting log file parser...")
-	file, err := os.Open(logDir + "/" + simulationLogFileName)
+	file, err := os.Open(logDir + "/" + resultsLogFileName)
 	if err != nil {
-		l.Errorf("Failed to read %s file: %v\n", simulationLogFileName, err)
+		l.Errorf("Failed to read %s file: %v\n", resultsLogFileName, err)
 	}
 	defer file.Close()
 
@@ -552,19 +623,19 @@ func RunMain(cmd *cobra.Command, dir string) {
 		os.Exit(1)
 	}
 
-	if err := lookupResultsDir(cmd.Context(), abs); err != nil {
-		if err == errStoppedByUser {
-			return
-		}
-		l.Errorf("Error happened while searching for results directory: %v\n", err)
-		os.Exit(1)
-	}
+	// if err := lookupResultsDir(cmd.Context(), abs); err != nil {
+	// 	if err == errStoppedByUser {
+	// 		return
+	// 	}
+	// 	l.Errorf("Error happened while searching for results directory: %v\n", err)
+	// 	os.Exit(1)
+	// }
 
 	if err := waitForLog(cmd.Context()); err != nil {
 		if err == errStoppedByUser {
 			return
 		}
-		l.Errorf("Failed waiting for %s with error: %v\n", simulationLogFileName, err)
+		l.Errorf("Failed waiting for %s with error: %v\n", resultsLogFileName, err)
 		os.Exit(1)
 	}
 

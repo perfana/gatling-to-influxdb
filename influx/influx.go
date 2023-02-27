@@ -391,17 +391,17 @@ func InitInfluxConnection(cmd *cobra.Command) error {
 		return err
 	}
 
-	_, _, err = c.Ping(time.Second * 10)
-	if err != nil {
-		return fmt.Errorf("Connection with InfluxDB at %s could not be established. Error: %w", address, err)
-	}
-	res, err := c.Query(infc.NewQuery("SHOW MEASUREMENTS", dbName, ""))
-	if err != nil {
-		return fmt.Errorf("Connection with InfluxDB at %s could not be established. Error: %w", address, err)
-	}
-	if err := res.Error(); err != nil {
-		return fmt.Errorf("Test query failed with error: %w", err)
-	}
+	// _, _, err = c.Ping(time.Second * 10)
+	// if err != nil {
+	// 	return fmt.Errorf("Connection with InfluxDB at %s could not be established. Error: %w", address, err)
+	// }
+	// res, err := c.Query(infc.NewQuery("SHOW MEASUREMENTS", dbName, ""))
+	// if err != nil {
+	// 	return fmt.Errorf("Connection with InfluxDB at %s could not be established. Error: %w", address, err)
+	// }
+	// if err := res.Error(); err != nil {
+	// 	return fmt.Errorf("Test query failed with error: %w", err)
+	// }
 	if !detached {
 		l.Infof("Connection with InfluxDB at %s successfully established\n", address)
 		return nil
