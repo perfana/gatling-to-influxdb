@@ -390,6 +390,8 @@ func InitInfluxConnection(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+    //sleep for 15 seconds to allow influxdb to	start
+	time.Sleep(15 * time.Second)
 
 	_, _, err = c.Ping(time.Second * 10)
 	if err != nil {
