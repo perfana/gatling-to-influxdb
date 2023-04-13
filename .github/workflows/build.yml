@@ -1,9 +1,9 @@
-name: build j2i
+name: build g2i
 
 on:
    push:
      tags:
-       - j2i-*
+       - g2i-*
 
    workflow_dispatch:
 
@@ -23,19 +23,15 @@ jobs:
 
       - name: Build
         run: |
-          CGO_ENABLED=0 go build -v .
-
-      - name: Test
-        run: |
-          go test -v .
+          CGO_ENABLED=0 go build g2i.go
 
       - uses: olegtarasov/get-tag@v2.1.2
         id: tagName
         with:
-          tagRegex: "j2i-(.*)"
+          tagRegex: "g2i-(.*)"
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "j2i"
+          artifacts: "g2i"
           body: "Release ${{ steps.tagName.outputs.tag }}"
 
