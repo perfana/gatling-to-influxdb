@@ -15,7 +15,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v3
-
+        with:
+          ref: jmeter-to-influx
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
@@ -25,6 +26,9 @@ jobs:
         run: |
           CGO_ENABLED=0 go build -v .
 
+      - name: List files
+        run: ls -lhart
+              
       - name: Test
         run: |
           go test -v .
