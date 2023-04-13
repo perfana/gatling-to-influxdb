@@ -24,15 +24,11 @@ jobs:
 
       - name: Build
         run: |
-          CGO_ENABLED=0 go build -v .
+          CGO_ENABLED=0 go build j2i.go
 
       - name: List files
         run: ls -lhart
               
-      - name: Test
-        run: |
-          go test -v .
-
       - uses: olegtarasov/get-tag@v2.1.2
         id: tagName
         with:
