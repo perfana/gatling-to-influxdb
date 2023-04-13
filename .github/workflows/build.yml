@@ -1,0 +1,41 @@
+name: build j2i
+
+on:
+   push:
+     tags:
+       - j2i-*
+
+   workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.20.2
+
+      - name: Build
+        run: |
+          CGO_ENABLED=0 go build -v .
+
+      - name: Test
+        run: |
+          go test -v .
+
+      - uses: olegtarasov/get-tag@v2.1.2
+        id: tagName
+        with:
+          tagRegex: "j2i-(.*)"
+
+      - uses: ncipollo/release-action@v1
+        with:
+          artifacts: "j2i"
+          body: "Release ${{ steps.tagName.outputs.tag }}"
+
