@@ -93,8 +93,8 @@ func preRunSetup(cmd *cobra.Command, args []string) error {
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use: "g2i [path/to/results/dir]",
-	Example: `g2i ./target/gatling -t "some-test-id" -d -l "/var/log/g2i.log"
+	Use: "j2i [path/to/results/dir]",
+	Example: `j2i ./target/gatling -t "some-test-id" -d -l "/var/log/j2i.log"
 
 Will first check InfluxDB connection.
 Then will search for the latest results directory or wait for it to appear.
@@ -128,14 +128,14 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Flags().BoolP("help", "h", false, "Display this help for g2i application")
-	rootCmd.Flags().BoolP("version", "v", false, "Display current g2i application version")
+	rootCmd.Flags().BoolP("help", "h", false, "Display this help for j2i application")
+	rootCmd.Flags().BoolP("version", "v", false, "Display current j2i application version")
 	rootCmd.Flags().BoolP("detached", "d", false, "Run application in background. Returns [PID] on start")
 	rootCmd.Flags().StringP("address", "a", "http://localhost:8086", "HTTP address and port of InfluxDB instance")
 	rootCmd.Flags().StringP("username", "u", "", "Username credential for InfluxDB instance")
 	rootCmd.Flags().StringP("password", "p", "", "Password credential for InfluxDB instance")
 	rootCmd.Flags().StringP("database", "b", "gatling", "Database name in InfluxDB")
-	rootCmd.Flags().StringP("log", "l", "./log/g2i.log", "File path to application log file")
+	rootCmd.Flags().StringP("log", "l", "./log/j2i.log", "File path to application log file")
 	rootCmd.Flags().StringP("test-environment", "t", "", "Test environment identifier")
 	rootCmd.Flags().StringP("system-under-test", "y", "", "System under test")
 	rootCmd.Flags().UintP("stop-timeout", "s", 60, "Time (seconds) to exit if no new log lines found")

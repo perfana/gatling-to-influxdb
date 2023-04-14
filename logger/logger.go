@@ -47,7 +47,7 @@ func InitLogger(fileName string) error {
 	dir := filepath.Dir(p)
 	err = os.MkdirAll(dir, 0755)
 	if err != nil {
-		return fmt.Errorf("Failed to create log dirrectory: %w", err)
+		return fmt.Errorf("Failed to create log directory: %w", err)
 	}
 
 	file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND|os.O_SYNC, 0644)

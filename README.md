@@ -27,11 +27,11 @@ Application takes only one required positional argument - path to Gatling result
 
 To get help on application usage use `--help` (`-h`) key. It will provide all existing keys and simple examples.
 
-`g2i` needs to be started before gatling test. A detached mode is available using `--detached` (`-d`) key that will launch application in background. On successful start it will print PID of started process for later use, like interrupting a process, which will finish all the work left and safely exit.
+`j2i` needs to be started before gatling test. A detached mode is available using `--detached` (`-d`) key that will launch application in background. On successful start it will print PID of started process for later use, like interrupting a process, which will finish all the work left and safely exit.
 
-Application writes a log with all errors encountered, by default it is located at `./log/g2i.log`, so any issues with application can be traced there. Log file path can be customized using `--log` (`-l`) key.
+Application writes a log with all errors encountered, by default it is located at `./log/j2i.log`, so any issues with application can be traced there. Log file path can be customized using `--log` (`-l`) key.
 
-By default `g2i` looks for InfluxDB at `http://localhost:8086` but it can be easily changed using `--address` (`-a`) key with another HTTP address. UDP connection is not implemented yet, leave a feedback if this feature is really required.
+By default `j2i` looks for InfluxDB at `http://localhost:8086` but it can be easily changed using `--address` (`-a`) key with another HTTP address. UDP connection is not implemented yet, leave a feedback if this feature is really required.
 
 Default database name is `gatling`, it can be changed using `--database` (`-b`) key following another name.
 
@@ -42,14 +42,14 @@ Integrating to CI can be done by running a set of commands like this (example us
 ```bash
 echo "Cleaning old stuff" && \
 sbt clean && \
-echo "Starting g2i in detached mode, saving PID in variable" && \
-G2IPID=$(g2i ./target/gatling -a http://localhost:8086 -u root -p root -b gatling -t "MySimulation-$BUILD_NUMBER" -d | awk '{print $2}') && \
+echo "Starting j2i in detached mode, saving PID in variable" && \
+J2IPID=$(j2i ./target/gatling -a http://localhost:8086 -u root -p root -b gatling -t "MySimulation-$BUILD_NUMBER" -d | awk '{print $2}') && \
 echo "Compile and launch simulation" && \
 sbt compile "gatling:testOnly simulations.MySimulation"; \
 echo "Waiting for parser to safely finish all its work" && \
 sleep 10 && \
-echo "Sending interrupt signal to g2i process" && \
-kill -INT $G2IPID && \
+echo "Sending interrupt signal to j2i process" && \
+kill -INT $J2IPID && \
 echo "Waiting for process to stop safely" && \
 sleep 10 && \
 echo "Exiting"
@@ -57,7 +57,7 @@ echo "Exiting"
 
 ## Warning
 
-For now `g2i` requires read/write access to InfluxDB, it is a workaround for checking if connection is successful.
+For now `j2i` requires read/write access to InfluxDB, it is a workaround for checking if connection is successful.
 
 Application can be used for parsing an existing log file, but some tricky approach is required for it. Easier way will be implemented in later versions.
 
@@ -77,7 +77,7 @@ For building latest version yourself, go version 1.13 or older is required with 
 git clone git@github.com:Dakaraj/gatling-to-influxdb.git
 cd gatling-to-influxdb
 go mod download
-go install g2i.go
+go install j2i.go
 ```
 
 ## Distribution and Contribution

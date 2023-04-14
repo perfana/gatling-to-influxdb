@@ -172,21 +172,11 @@ func lookupResultsDir(ctx context.Context, dir string) error {
 }
 
 func waitForLog(ctx context.Context) error {
+
 	const loopTimeout = 5 * time.Second
+    const resultFilePattern = "*.csv"
 
-	resultFilePattern := "*.csv"
-	files, err := filepath.Glob(logDir + "/" + resultFilePattern)
-	if err != nil {
-		fmt.Println("Error:", err)
-		return err
-	}
-	if len(files) == 0 {
-		fmt.Println("No results file found matching pattern", resultFilePattern)
-		return err
-	}
-	resultsLogFileName = filepath.Base(files[0])
-
-	l.Infoln("Searching for " + logDir + "/" + resultsLogFileName + " file...")
+	l.Infoln("Searching for " + logDir + "/" + resultFilePattern + " files...")
 	for {
 		// This block checks if stop signal is received from user
 		// and stops further lookup
@@ -195,6 +185,19 @@ func waitForLog(ctx context.Context) error {
 			return errStoppedByUser
 		default:
 		}
+
+
+        files, err := filepath.Glob(logDir + "/" + resultFilePattern)
+        if err != nil {
+            fmt.Println("Error:", err)
+            return err
+        }
+        if len(files) == 0 {
+            fmt.Println("No results file found in dir %s matching pattern %s", logDir, resultFilePattern)
+			time.Sleep(loopTimeout)
+            continue
+        }
+        resultsLogFileName = filepath.Base(files[0])
 
 		fInfo, err := os.Stat(logDir + "/" + resultsLogFileName)
 		if err != nil && !os.IsNotExist(err) {
