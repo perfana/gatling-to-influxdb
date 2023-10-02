@@ -81,7 +81,11 @@ var (
 	runLine     = regexp.MustCompile(`^RUN\s`)
 	errorLine   = regexp.MustCompile(`^ERROR\s`)
 
-    gatlingVersionPattern = regexp.MustCompile(`3\.[5-9]\.[0-9]`)
+    http_reqs         = regexp.MustCompile(`^http_reqs\s`)
+    http_req_duration = regexp.MustCompile(`^http_req_duration\s`)
+    grpc_req_duration = regexp.MustCompile(`^grpc_req_duration\s`)
+    group_duration    = regexp.MustCompile(`^group_duration\s`)
+
 
 	parserStopped = make(chan struct{})
 )
@@ -212,332 +216,156 @@ func timeFromUnixBytes(ub []byte) (time.Time, error) {
 	return time.Unix(0, timeStamp*oneMillisecond+rand.Int63n(oneMillisecond)), nil
 }
 
-func userLineProcess(lb []byte) error {
-	split := bytes.Split(lb, tabSep)
-
-    if(gatlingVersionPattern.MatchString(gatlingVersion)){
-        if len(split) != 4 {
-            return errors.New("USER line contains unexpected amount of values")
-        }
-        scenario := string(split[1])
-        // Using the second of the two timestamps
-        // A user life duration may come in handy later
-        timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[3]))
-        if err != nil {
-            return err
-        }
-
-        influx.SendUserLineData(timestamp, scenario, string(split[2]))
-	} else {
-        if len(split) != 6 {
-            return errors.New("USER line contains unexpected amount of values")
-        }
-        scenario := string(split[1])
-        // Using the second of the two timestamps
-        // A user life duration may come in handy later
-        timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[5]))
-        if err != nil {
-            return err
-        }
-
-        influx.SendUserLineData(timestamp, scenario, string(split[3]))
-    }
-	return nil
-}
-
-func requestLineProcess(lb []byte) error {
+func http_req_duration_LineProcess(lb []byte) error {
 
 
-    if(gatlingVersionPattern.MatchString(gatlingVersion)){
+split := bytes.Split(lb, []byte(","))
+		if len(split) != 18 {
+			return errors.New("Line contains unexpected amount of values")
+		}
 
-        split := bytes.Split(lb, tabSep)
-            if len(split) != 7 {
-                return errors.New("REQUEST line contains unexpected amount of values")
-            }
+		timestamp, err := timeFromUnixBytes(split[1])
+		if err != nil {
+			return err
+		}
 
-            start, err := strconv.ParseInt(string(split[3]), 10, 64)
-            if err != nil {
-                return fmt.Errorf("Failed to parse request start time in line as integer: %w", err)
-            }
-            end, err := strconv.ParseInt(string(split[4]), 10, 64)
-            if err != nil {
-                return fmt.Errorf("Failed to parse request end time in line as integer: %w", err)
-            }
-            timestamp, err := timeFromUnixBytes(split[4])
-            if err != nil {
-                return err
-            }
+		duration, err := strconv.Atoi(string(split[2]))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
 
-            point, err := influx.NewPoint(
-            		"requests",
-            		map[string]string{
-            			"name":       strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
-            			"groups":     strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
-            			"result":     string(split[5]),
-            			"simulation": simulationName,
-            			"systemUnderTest": systemUnderTest,
-            			"testEnvironment": testEnvironment,
-            			"nodeName":   nodeName,
-            			"errorMessage": string(bytes.TrimSpace(split[6])),
-            		},
-            		map[string]interface{}{
-            			"duration":     int(end - start),
-            		},
-            		timestamp,
-            	)
-            	if err != nil {
-            		return fmt.Errorf("Error creating new point with request data: %w", err)
-            	}
-
-            	influx.SendPoint(point)
-
-    } else {
-        split := bytes.Split(lb, tabSep)
-        if len(split) != 8 {
-            return errors.New("REQUEST line contains unexpected amount of values")
-        }
-
-        userID, err := strconv.ParseInt(string(split[1]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse userID in line as integer: %w", err)
-        }
-        start, err := strconv.ParseInt(string(split[4]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse request start time in line as integer: %w", err)
-        }
-        end, err := strconv.ParseInt(string(split[5]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse request end time in line as integer: %w", err)
-        }
-        timestamp, err := timeFromUnixBytes(split[5])
-        if err != nil {
-            return err
-        }
-
-        point, err := influx.NewPoint(
-        		"requests",
-        		map[string]string{
-        			"name":       strings.TrimSpace(strings.ReplaceAll(string(split[3]), " ", "_")),
-        			"groups":     strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
-        			"result":     string(split[6]),
-        			"simulation": simulationName,
-        			"systemUnderTest": systemUnderTest,
-        			"testEnvironment": testEnvironment,
-        			"nodeName":   nodeName,
-        			"errorMessage": string(bytes.TrimSpace(split[7])),
-        		},
-        		map[string]interface{}{
-        			"userId":       int(userID),
-        			"duration":     int(end - start),
-        		},
-        		timestamp,
-        	)
-        	if err != nil {
-        		return fmt.Errorf("Error creating new point with request data: %w", err)
-        	}
-
-        	influx.SendPoint(point)
-
-    }
-
-
-
-	return nil
-}
-
-func groupLineProcess(lb []byte) error {
-	split := bytes.Split(lb, tabSep)
-	if(gatlingVersionPattern.MatchString(gatlingVersion)){
-        if len(split) != 6 {
-            return errors.New("GROUP line contains unexpected amount of values")
-        }
-
-
-        start, err := strconv.ParseInt(string(split[2]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group start time in line as integer: %w", err)
-        }
-        end, err := strconv.ParseInt(string(split[3]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group end time in line as integer: %w", err)
-        }
-        rawDuration, err := strconv.ParseInt(string(split[4]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group raw duration in line as integer: %w", err)
-        }
-        timestamp, err := timeFromUnixBytes(split[3])
-        if err != nil {
-            return err
-        }
-
-        point, err := influx.NewPoint(
-            "groups",
-            map[string]string{
-                "name":       strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
-                "result":     string(split[5][:2]),
-                "simulation": simulationName,
-                "systemUnderTest": systemUnderTest,
-                "testEnvironment": testEnvironment,
-                "nodeName":   nodeName,
-            },
-            map[string]interface{}{
-                "totalDuration": int(end - start),
-                "rawDuration":   int(rawDuration),
-            },
+        requestPoint, err := influx.NewPoint(
+        "http_req_duration",
+        map[string]string{
+            "name": strings.TrimSpace(strings.ReplaceAll(string(split[9]), " ", "_")),
+            "group": strings.TrimSpace(strings.ReplaceAll(string(split[7]), " ", "_")),
+            "method": string(split[8]),
+            "expected_response": string(split[6]),
+            "systemUnderTest": systemUnderTest,
+            "testEnvironment": testEnvironment,
+            "nodeName":   nodeName,
+            "status": string(split[13]),
+            "service": string(split[12]),
+            "url": string(split[16]),
+            "scenario": string(split[11]),
+            "error_code": string(split[5]),
+            "error": string(bytes.TrimSpace(split[4])),
+        },
+        map[string]interface{}{
+            "duration":  duration   ,
+        },
             timestamp,
-        )
-        if err != nil {
-            return fmt.Errorf("Error creating new point with group data: %w", err)
-        }
+			)
+			if err != nil {
+				return fmt.Errorf("Error creating new point with request data: %w", err)
+			}
 
-        influx.SendPoint(point)
+			influx.SendPoint(requestPoint)
 
-    } else {
-        if len(split) != 7 {
-            return errors.New("GROUP line contains unexpected amount of values")
-        }
+	return nil
+}
+func grpc_req_duration_LineProcess(lb []byte) error {
 
-        userID, err := strconv.ParseInt(string(split[1]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse userID in line as integer: %w", err)
-        }
-        start, err := strconv.ParseInt(string(split[3]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group start time in line as integer: %w", err)
-        }
-        end, err := strconv.ParseInt(string(split[4]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group end time in line as integer: %w", err)
-        }
-        rawDuration, err := strconv.ParseInt(string(split[5]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group raw duration in line as integer: %w", err)
-        }
-        timestamp, err := timeFromUnixBytes(split[4])
-        if err != nil {
-            return err
-        }
 
-        point, err := influx.NewPoint(
-            "groups",
-            map[string]string{
-                "name":       strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
-                "result":     string(split[6][:2]),
-                "simulation": simulationName,
-                "systemUnderTest": systemUnderTest,
-                "testEnvironment": testEnvironment,
-                "nodeName":   nodeName,
-            },
-            map[string]interface{}{
-                "userId":        int(userID),
-                "totalDuration": int(end - start),
-                "rawDuration":   int(rawDuration),
-            },
+split := bytes.Split(lb, []byte(","))
+		if len(split) != 18 {
+			return errors.New("Line contains unexpected amount of values")
+		}
+
+		timestamp, err := timeFromUnixBytes(split[1])
+		if err != nil {
+			return err
+		}
+
+		duration, err := strconv.Atoi(string(split[2]))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+
+        requestPoint, err := influx.NewPoint(
+        "grpc_req_duration",
+        map[string]string{
+            "name": strings.TrimSpace(strings.ReplaceAll(string(split[9]), " ", "_")),
+            "group": strings.TrimSpace(strings.ReplaceAll(string(split[7]), " ", "_")),
+            "method": string(split[8]),
+            "expected_response": string(split[6]),
+            "systemUnderTest": systemUnderTest,
+            "testEnvironment": testEnvironment,
+            "nodeName":   nodeName,
+            "status": string(split[13]),
+            "service": string(split[12]),
+            "url": string(split[16]),
+            "scenario": string(split[11]),
+            "error_code": string(split[5]),
+            "error": string(bytes.TrimSpace(split[4])),
+        },
+        map[string]interface{}{
+            "duration":  duration   ,
+        },
             timestamp,
-        )
-        if err != nil {
-            return fmt.Errorf("Error creating new point with group data: %w", err)
-        }
+			)
+			if err != nil {
+				return fmt.Errorf("Error creating new point with request data: %w", err)
+			}
 
-        influx.SendPoint(point)
-    }
-	return nil
-}
-
-
-// This method should be called first when parsing started as it is based
-// on information from the header row
-func runLineProcess(lb []byte) error {
-	split := bytes.Split(lb, tabSep)
-	if len(split) != runLineLen {
-		return errors.New("RUN line contains unexpected amount of values")
-	}
-
-	simulationName = string(split[1])[strings.LastIndex(string(split[1]), ".")+1:]
-	description := string(split[4])
-	testStartTime, err := timeFromUnixBytes(split[3])
-	if err != nil {
-		return err
-	}
-	gatlingVersion = string(split[5])
-
-
-	// This will initialize required data for influx client
-	influx.InitTestInfo(systemUnderTest, testEnvironment, simulationName, description, nodeName, testStartTime)
-
-	point, err := influx.NewPoint(
-		"tests",
-		map[string]string{
-			"action":     "start",
-			"simulation": simulationName,
-			"systemUnderTest":     systemUnderTest,
-			"testEnvironment":     testEnvironment,
-			"nodeName":   nodeName,
-		},
-		map[string]interface{}{
-			"description": description,
-		},
-		testStartTime,
-	)
-	if err != nil {
-		return fmt.Errorf("Error creating new point with test start data: %w", err)
-	}
-
-	influx.SendPoint(point)
+			influx.SendPoint(requestPoint)
 
 	return nil
 }
 
-func errorLineProcess(lb []byte) error {
-	split := bytes.Split(lb, tabSep)
-	if len(split) != errorLineLen {
-		return errors.New("ERROR line contains unexpected amount of values")
-	}
-	timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[2]))
-	if err != nil {
-		return err
-	}
+func group_duration_LineProcess(lb []byte) error {
 
-	point, err := influx.NewPoint(
-		"errors",
-		map[string]string{
-			"systemUnderTest":     systemUnderTest,
-			"testEnvironment":     testEnvironment,
-			"nodeName":   nodeName,
-			"simulation": simulationName,
-		},
-		map[string]interface{}{
-			"errorMessage": string(split[1]),
-		},
-		timestamp,
-	)
-	if err != nil {
-		return fmt.Errorf("Error creating new point with error data: %w", err)
-	}
 
-	influx.SendPoint(point)
+split := bytes.Split(lb, []byte(","))
+		if len(split) != 18 {
+			return errors.New("Line contains unexpected amount of values")
+		}
+
+		timestamp, err := timeFromUnixBytes(split[1])
+		if err != nil {
+			return err
+		}
+
+		duration, err := strconv.Atoi(string(split[2]))
+		if err != nil {
+			fmt.Println("Error:", err)
+			return err
+		}
+
+        requestPoint, err := influx.NewPoint(
+        "group_duration",
+        map[string]string{
+            "group": strings.TrimSpace(strings.ReplaceAll(string(split[7]), " ", "_")),
+            "scenario": string(split[11]),
+
+        },
+        map[string]interface{}{
+            "duration":  duration   ,
+        },
+            timestamp,
+			)
+			if err != nil {
+				return fmt.Errorf("Error creating new point with request data: %w", err)
+			}
+
+			influx.SendPoint(requestPoint)
 
 	return nil
 }
+
 
 func stringProcessor(lineBuffer []byte, gatlingVersion string) error {
 
+
 	switch {
-	case requestLine.Match(lineBuffer):
-		return requestLineProcess(lineBuffer)
-	case groupLine.Match(lineBuffer):
-		return groupLineProcess(lineBuffer)
-	case userLine.Match(lineBuffer):
-		return userLineProcess(lineBuffer)
-	case errorLine.Match(lineBuffer):
-		return errorLineProcess(lineBuffer)
-	case runLine.Match(lineBuffer):
-		err := runLineProcess(lineBuffer)
-		if err != nil {
-			// Wrapping in a fatal error because further processing is futile
-			err = fmt.Errorf("%v: %w", err, errFatal)
-		}
-		return err
+	case http_req_duration.Match(lineBuffer):
+		return http_req_duration_LineProcess(lineBuffer)
+	case grpc_req_duration.Match(lineBuffer):
+		return grpc_req_duration_LineProcess(lineBuffer)
+	case group_duration.Match(lineBuffer):
+		return group_duration_LineProcess(lineBuffer)
 	default:
 		return fmt.Errorf("Unknown line type encountered")
 	}
