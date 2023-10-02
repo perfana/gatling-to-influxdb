@@ -48,7 +48,7 @@ import (
 
 const (
 	oneMillisecond        = 1_000_000
-	simulationLogFileName = "simulation.log"
+	// simulationLogFileName = "simulation.log"
 	// Constant amounts of elements per log line
 	runLineLen     = 6
 	requestLineLen = 8
@@ -59,6 +59,7 @@ const (
 
 var (
 	resultDirNamePattern = regexp.MustCompile(`^.+?-(\d{14})\d{3}$`)
+
 	startTime            = time.Now().Unix()
 	nodeName             string
 	gatlingVersion       string
@@ -71,6 +72,7 @@ var (
 	testEnvironment  string
 	simulationName   string
 	waitTime         uint
+    resultsLogFileName string
 
 	tabSep = []byte{9}
 
@@ -81,10 +83,9 @@ var (
 	runLine     = regexp.MustCompile(`^RUN\s`)
 	errorLine   = regexp.MustCompile(`^ERROR\s`)
 
-    http_reqs         = regexp.MustCompile(`^http_reqs\s`)
-    http_req_duration = regexp.MustCompile(`^http_req_duration\s`)
-    grpc_req_duration = regexp.MustCompile(`^grpc_req_duration\s`)
-    group_duration    = regexp.MustCompile(`^group_duration\s`)
+    http_req_duration = regexp.MustCompile(`^http_req_duration.*`)
+    grpc_req_duration = regexp.MustCompile(`^grpc_req_duration.*`)
+    group_duration    = regexp.MustCompile(`^group_duration.*`)
 
 
 	parserStopped = make(chan struct{})
@@ -118,6 +119,7 @@ func lookupTargetDir(ctx context.Context, dir string) error {
 
 		abs, _ := filepath.Abs(dir)
 		l.Infof("Target directory found at %s", abs)
+		logDir = abs
 		break
 	}
 
@@ -172,9 +174,11 @@ func lookupResultsDir(ctx context.Context, dir string) error {
 }
 
 func waitForLog(ctx context.Context) error {
-	const loopTimeout = 5 * time.Second
 
-	l.Infoln("Searching for " + simulationLogFileName + " file...")
+	const loopTimeout = 5 * time.Second
+    const resultFilePattern = "*.csv"
+
+	l.Infoln("Searching for " + logDir + "/" + resultFilePattern + " files...")
 	for {
 		// This block checks if stop signal is received from user
 		// and stops further lookup
@@ -184,7 +188,20 @@ func waitForLog(ctx context.Context) error {
 		default:
 		}
 
-		fInfo, err := os.Stat(logDir + "/" + simulationLogFileName)
+
+        files, err := filepath.Glob(logDir + "/" + resultFilePattern)
+        if err != nil {
+            fmt.Println("Error:", err)
+            return err
+        }
+        if len(files) == 0 {
+            fmt.Println("No results file found in dir %s matching pattern %s", logDir, resultFilePattern)
+			time.Sleep(loopTimeout)
+            continue
+        }
+        resultsLogFileName = filepath.Base(files[0])
+
+		fInfo, err := os.Stat(logDir + "/" + resultsLogFileName)
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -195,12 +212,12 @@ func waitForLog(ctx context.Context) error {
 
 		// WARNING: second part of this check may fail on Windows. Not tested
 		if fInfo.Mode().IsRegular() && (runtime.GOOS == "windows" || fInfo.Mode().Perm() == 420) {
-			abs, _ := filepath.Abs(logDir + "/" + simulationLogFileName)
+			abs, _ := filepath.Abs(logDir + "/" + resultsLogFileName)
 			l.Infof("Found %s\n", abs)
 			break
 		}
 
-		return errors.New("Something wrong happened when attempting to open " + simulationLogFileName)
+		return errors.New("Something wrong happened when attempting to open " + resultsLogFileName)
 	}
 
 	return nil
@@ -213,14 +230,14 @@ func timeFromUnixBytes(ub []byte) (time.Time, error) {
 	}
 	// A workaround that adds random amount of microseconds to the timestamp
 	// so db entries will (should) not be overwritten
-	return time.Unix(0, timeStamp*oneMillisecond+rand.Int63n(oneMillisecond)), nil
+	return time.Unix(0, (timeStamp*1000) * oneMillisecond + rand.Int63n(oneMillisecond)), nil
 }
 
 func http_req_duration_LineProcess(lb []byte) error {
 
 
 split := bytes.Split(lb, []byte(","))
-		if len(split) != 18 {
+		if len(split) != 19 {
 			return errors.New("Line contains unexpected amount of values")
 		}
 
@@ -229,7 +246,7 @@ split := bytes.Split(lb, []byte(","))
 			return err
 		}
 
-		duration, err := strconv.Atoi(string(split[2]))
+		duration, err := strconv.ParseFloat(string(split[2]), 64)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return err
@@ -269,7 +286,7 @@ func grpc_req_duration_LineProcess(lb []byte) error {
 
 
 split := bytes.Split(lb, []byte(","))
-		if len(split) != 18 {
+		if len(split) != 19 {
 			return errors.New("Line contains unexpected amount of values")
 		}
 
@@ -278,7 +295,7 @@ split := bytes.Split(lb, []byte(","))
 			return err
 		}
 
-		duration, err := strconv.Atoi(string(split[2]))
+		duration, err := strconv.ParseFloat(string(split[2]), 64)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return err
@@ -319,7 +336,7 @@ func group_duration_LineProcess(lb []byte) error {
 
 
 split := bytes.Split(lb, []byte(","))
-		if len(split) != 18 {
+		if len(split) != 19 {
 			return errors.New("Line contains unexpected amount of values")
 		}
 
@@ -328,7 +345,7 @@ split := bytes.Split(lb, []byte(","))
 			return err
 		}
 
-		duration, err := strconv.Atoi(string(split[2]))
+    	duration, err := strconv.ParseFloat(string(split[2]), 64)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return err
@@ -367,7 +384,8 @@ func stringProcessor(lineBuffer []byte, gatlingVersion string) error {
 	case group_duration.Match(lineBuffer):
 		return group_duration_LineProcess(lineBuffer)
 	default:
-		return fmt.Errorf("Unknown line type encountered")
+		return nil
+		//return fmt.Errorf("Unknown line type encountered")
 	}
 }
 
@@ -424,9 +442,9 @@ func parseStart(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	l.Infoln("Starting log file parser...")
-	file, err := os.Open(logDir + "/" + simulationLogFileName)
+	file, err := os.Open(logDir + "/" + resultsLogFileName)
 	if err != nil {
-		l.Errorf("Failed to read %s file: %v\n", simulationLogFileName, err)
+		l.Errorf("Failed to read %s file: %v\n", resultsLogFileName, err)
 	}
 	defer file.Close()
 
@@ -455,19 +473,19 @@ func RunMain(cmd *cobra.Command, dir string) {
 		os.Exit(1)
 	}
 
-	if err := lookupResultsDir(cmd.Context(), abs); err != nil {
-		if err == errStoppedByUser {
-			return
-		}
-		l.Errorf("Error happened while searching for results directory: %v\n", err)
-		os.Exit(1)
-	}
+	// if err := lookupResultsDir(cmd.Context(), abs); err != nil {
+	// 	if err == errStoppedByUser {
+	// 		return
+	// 	}
+	// 	l.Errorf("Error happened while searching for results directory: %v\n", err)
+	// 	os.Exit(1)
+	// }
 
 	if err := waitForLog(cmd.Context()); err != nil {
 		if err == errStoppedByUser {
 			return
 		}
-		l.Errorf("Failed waiting for %s with error: %v\n", simulationLogFileName, err)
+		l.Errorf("Failed waiting for %s with error: %v\n", resultsLogFileName, err)
 		os.Exit(1)
 	}
 
