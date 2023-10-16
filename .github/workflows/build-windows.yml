@@ -1,4 +1,4 @@
-name: build k2i
+name: build k2i for windows 386
 
 on:
   push:
