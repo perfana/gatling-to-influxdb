@@ -23,7 +23,7 @@ jobs:
 
       - name: Build
         run: |
-          env GOOS=windows GOARCH=386 CGO_ENABLED=0 go build k2i.go -o k2i-windows-386
+          env GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -o k2i-windows-386 k2i.go 
 
       - uses: olegtarasov/get-tag@v2.1.2
         id: tagName
