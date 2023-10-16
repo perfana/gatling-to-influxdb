@@ -23,14 +23,14 @@ jobs:
 
       - name: Build
         run: |
-          env GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -o ./k2i-windows-386 k2i.go 
+          env GOOS=windows GOARCH=386 CGO_ENABLED=0 go build -o ./k2i-win-386.exe k2i.go 
 
       - uses: olegtarasov/get-tag@v2.1.2
         id: tagName
         with:
-          tagRegex: "k2i-(.*)"
+          tagRegex: "k2i-win-386-(.*)"
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "k2i-windows-386.exe"
+          artifacts: "k2i-win-386.exe"
           body: "Release ${{ steps.tagName.outputs.tag }}"
