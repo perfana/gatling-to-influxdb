@@ -35,9 +35,9 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
 	"github.com/dakaraj/gatling-to-influxdb/influx"
 	l "github.com/dakaraj/gatling-to-influxdb/logger"
@@ -81,9 +81,9 @@ var (
 	runLine     = regexp.MustCompile(`^RUN\s`)
 	errorLine   = regexp.MustCompile(`^ERROR\s`)
 
-    gatlingVersionPattern = regexp.MustCompile(`3\.[5-9]\.[0-9]`)
-
-	parserStopped = make(chan struct{})
+	// lowest match: 3.5.0
+	isGatlingLogFormatV2 = false
+	parserStopped        = make(chan struct{})
 )
 
 func lookupTargetDir(ctx context.Context, dir string) error {
@@ -215,235 +215,232 @@ func timeFromUnixBytes(ub []byte) (time.Time, error) {
 func userLineProcess(lb []byte) error {
 	split := bytes.Split(lb, tabSep)
 
-    if(gatlingVersionPattern.MatchString(gatlingVersion)){
-        if len(split) != 4 {
-            return errors.New("USER line contains unexpected amount of values")
-        }
-        scenario := string(split[1])
-        // Using the second of the two timestamps
-        // A user life duration may come in handy later
-        timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[3]))
-        if err != nil {
-            return err
-        }
+	splitCount := len(split)
 
-        influx.SendUserLineData(timestamp, scenario, string(split[2]))
+	if isGatlingLogFormatV2 {
+		if splitCount != 4 {
+			return errors.New(fmt.Sprintf("USER line contains %d instead of 4 values", splitCount))
+		}
+		scenario := string(split[1])
+		// Using the second of the two timestamps
+		// A user life duration may come in handy later
+		timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[3]))
+		if err != nil {
+			return err
+		}
+
+		influx.SendUserLineData(timestamp, scenario, string(split[2]))
 	} else {
-        if len(split) != 6 {
-            return errors.New("USER line contains unexpected amount of values")
-        }
-        scenario := string(split[1])
-        // Using the second of the two timestamps
-        // A user life duration may come in handy later
-        timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[5]))
-        if err != nil {
-            return err
-        }
+		if splitCount != 6 {
+			return errors.New(fmt.Sprintf("USER line contains %d instead of 6 values", splitCount))
+		}
+		scenario := string(split[1])
+		// Using the second of the two timestamps
+		// A user life duration may come in handy later
+		timestamp, err := timeFromUnixBytes(bytes.TrimSpace(split[5]))
+		if err != nil {
+			return err
+		}
 
-        influx.SendUserLineData(timestamp, scenario, string(split[3]))
-    }
+		influx.SendUserLineData(timestamp, scenario, string(split[3]))
+	}
 	return nil
 }
 
 func requestLineProcess(lb []byte) error {
 
+	if isGatlingLogFormatV2 {
 
-    if(gatlingVersionPattern.MatchString(gatlingVersion)){
+		split := bytes.Split(lb, tabSep)
+		if len(split) != 7 {
+			return errors.New("REQUEST line contains unexpected amount of values")
+		}
 
-        split := bytes.Split(lb, tabSep)
-            if len(split) != 7 {
-                return errors.New("REQUEST line contains unexpected amount of values")
-            }
+		start, err := strconv.ParseInt(string(split[3]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse request start time in line as integer: %w", err)
+		}
+		end, err := strconv.ParseInt(string(split[4]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse request end time in line as integer: %w", err)
+		}
+		timestamp, err := timeFromUnixBytes(split[4])
+		if err != nil {
+			return err
+		}
 
-            start, err := strconv.ParseInt(string(split[3]), 10, 64)
-            if err != nil {
-                return fmt.Errorf("Failed to parse request start time in line as integer: %w", err)
-            }
-            end, err := strconv.ParseInt(string(split[4]), 10, 64)
-            if err != nil {
-                return fmt.Errorf("Failed to parse request end time in line as integer: %w", err)
-            }
-            timestamp, err := timeFromUnixBytes(split[4])
-            if err != nil {
-                return err
-            }
+		point, err := influx.NewPoint(
+			"requests",
+			map[string]string{
+				"name":            strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
+				"groups":          strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
+				"result":          string(split[5]),
+				"simulation":      simulationName,
+				"systemUnderTest": systemUnderTest,
+				"testEnvironment": testEnvironment,
+				"nodeName":        nodeName,
+				"errorMessage":    string(bytes.TrimSpace(split[6])),
+			},
+			map[string]interface{}{
+				"duration": int(end - start),
+			},
+			timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("Error creating new point with request data: %w", err)
+		}
 
-            point, err := influx.NewPoint(
-            		"requests",
-            		map[string]string{
-            			"name":       strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
-            			"groups":     strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
-            			"result":     string(split[5]),
-            			"simulation": simulationName,
-            			"systemUnderTest": systemUnderTest,
-            			"testEnvironment": testEnvironment,
-            			"nodeName":   nodeName,
-            			"errorMessage": string(bytes.TrimSpace(split[6])),
-            		},
-            		map[string]interface{}{
-            			"duration":     int(end - start),
-            		},
-            		timestamp,
-            	)
-            	if err != nil {
-            		return fmt.Errorf("Error creating new point with request data: %w", err)
-            	}
+		influx.SendPoint(point)
 
-            	influx.SendPoint(point)
+	} else {
+		split := bytes.Split(lb, tabSep)
+		if len(split) != 8 {
+			return errors.New("REQUEST line contains unexpected amount of values")
+		}
 
-    } else {
-        split := bytes.Split(lb, tabSep)
-        if len(split) != 8 {
-            return errors.New("REQUEST line contains unexpected amount of values")
-        }
+		userID, err := strconv.ParseInt(string(split[1]), 10, 32)
+		if err != nil {
+			return fmt.Errorf("Failed to parse userID in line as integer: %w", err)
+		}
+		start, err := strconv.ParseInt(string(split[4]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse request start time in line as integer: %w", err)
+		}
+		end, err := strconv.ParseInt(string(split[5]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse request end time in line as integer: %w", err)
+		}
+		timestamp, err := timeFromUnixBytes(split[5])
+		if err != nil {
+			return err
+		}
 
-        userID, err := strconv.ParseInt(string(split[1]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse userID in line as integer: %w", err)
-        }
-        start, err := strconv.ParseInt(string(split[4]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse request start time in line as integer: %w", err)
-        }
-        end, err := strconv.ParseInt(string(split[5]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse request end time in line as integer: %w", err)
-        }
-        timestamp, err := timeFromUnixBytes(split[5])
-        if err != nil {
-            return err
-        }
+		point, err := influx.NewPoint(
+			"requests",
+			map[string]string{
+				"name":            strings.TrimSpace(strings.ReplaceAll(string(split[3]), " ", "_")),
+				"groups":          strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
+				"result":          string(split[6]),
+				"simulation":      simulationName,
+				"systemUnderTest": systemUnderTest,
+				"testEnvironment": testEnvironment,
+				"nodeName":        nodeName,
+				"errorMessage":    string(bytes.TrimSpace(split[7])),
+			},
+			map[string]interface{}{
+				"userId":   int(userID),
+				"duration": int(end - start),
+			},
+			timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("Error creating new point with request data: %w", err)
+		}
 
-        point, err := influx.NewPoint(
-        		"requests",
-        		map[string]string{
-        			"name":       strings.TrimSpace(strings.ReplaceAll(string(split[3]), " ", "_")),
-        			"groups":     strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
-        			"result":     string(split[6]),
-        			"simulation": simulationName,
-        			"systemUnderTest": systemUnderTest,
-        			"testEnvironment": testEnvironment,
-        			"nodeName":   nodeName,
-        			"errorMessage": string(bytes.TrimSpace(split[7])),
-        		},
-        		map[string]interface{}{
-        			"userId":       int(userID),
-        			"duration":     int(end - start),
-        		},
-        		timestamp,
-        	)
-        	if err != nil {
-        		return fmt.Errorf("Error creating new point with request data: %w", err)
-        	}
+		influx.SendPoint(point)
 
-        	influx.SendPoint(point)
-
-    }
-
-
+	}
 
 	return nil
 }
 
 func groupLineProcess(lb []byte) error {
 	split := bytes.Split(lb, tabSep)
-	if(gatlingVersionPattern.MatchString(gatlingVersion)){
-        if len(split) != 6 {
-            return errors.New("GROUP line contains unexpected amount of values")
-        }
+	if isGatlingLogFormatV2 {
+		if len(split) != 6 {
+			return errors.New("GROUP line contains unexpected amount of values")
+		}
 
+		start, err := strconv.ParseInt(string(split[2]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse group start time in line as integer: %w", err)
+		}
+		end, err := strconv.ParseInt(string(split[3]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse group end time in line as integer: %w", err)
+		}
+		rawDuration, err := strconv.ParseInt(string(split[4]), 10, 32)
+		if err != nil {
+			return fmt.Errorf("Failed to parse group raw duration in line as integer: %w", err)
+		}
+		timestamp, err := timeFromUnixBytes(split[3])
+		if err != nil {
+			return err
+		}
 
-        start, err := strconv.ParseInt(string(split[2]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group start time in line as integer: %w", err)
-        }
-        end, err := strconv.ParseInt(string(split[3]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group end time in line as integer: %w", err)
-        }
-        rawDuration, err := strconv.ParseInt(string(split[4]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group raw duration in line as integer: %w", err)
-        }
-        timestamp, err := timeFromUnixBytes(split[3])
-        if err != nil {
-            return err
-        }
+		point, err := influx.NewPoint(
+			"groups",
+			map[string]string{
+				"name":            strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
+				"result":          string(split[5][:2]),
+				"simulation":      simulationName,
+				"systemUnderTest": systemUnderTest,
+				"testEnvironment": testEnvironment,
+				"nodeName":        nodeName,
+			},
+			map[string]interface{}{
+				"totalDuration": int(end - start),
+				"rawDuration":   int(rawDuration),
+			},
+			timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("Error creating new point with group data: %w", err)
+		}
 
-        point, err := influx.NewPoint(
-            "groups",
-            map[string]string{
-                "name":       strings.TrimSpace(strings.ReplaceAll(string(split[1]), " ", "_")),
-                "result":     string(split[5][:2]),
-                "simulation": simulationName,
-                "systemUnderTest": systemUnderTest,
-                "testEnvironment": testEnvironment,
-                "nodeName":   nodeName,
-            },
-            map[string]interface{}{
-                "totalDuration": int(end - start),
-                "rawDuration":   int(rawDuration),
-            },
-            timestamp,
-        )
-        if err != nil {
-            return fmt.Errorf("Error creating new point with group data: %w", err)
-        }
+		influx.SendPoint(point)
 
-        influx.SendPoint(point)
+	} else {
+		if len(split) != 7 {
+			return errors.New("GROUP line contains unexpected amount of values")
+		}
 
-    } else {
-        if len(split) != 7 {
-            return errors.New("GROUP line contains unexpected amount of values")
-        }
+		userID, err := strconv.ParseInt(string(split[1]), 10, 32)
+		if err != nil {
+			return fmt.Errorf("Failed to parse userID in line as integer: %w", err)
+		}
+		start, err := strconv.ParseInt(string(split[3]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse group start time in line as integer: %w", err)
+		}
+		end, err := strconv.ParseInt(string(split[4]), 10, 64)
+		if err != nil {
+			return fmt.Errorf("Failed to parse group end time in line as integer: %w", err)
+		}
+		rawDuration, err := strconv.ParseInt(string(split[5]), 10, 32)
+		if err != nil {
+			return fmt.Errorf("Failed to parse group raw duration in line as integer: %w", err)
+		}
+		timestamp, err := timeFromUnixBytes(split[4])
+		if err != nil {
+			return err
+		}
 
-        userID, err := strconv.ParseInt(string(split[1]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse userID in line as integer: %w", err)
-        }
-        start, err := strconv.ParseInt(string(split[3]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group start time in line as integer: %w", err)
-        }
-        end, err := strconv.ParseInt(string(split[4]), 10, 64)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group end time in line as integer: %w", err)
-        }
-        rawDuration, err := strconv.ParseInt(string(split[5]), 10, 32)
-        if err != nil {
-            return fmt.Errorf("Failed to parse group raw duration in line as integer: %w", err)
-        }
-        timestamp, err := timeFromUnixBytes(split[4])
-        if err != nil {
-            return err
-        }
+		point, err := influx.NewPoint(
+			"groups",
+			map[string]string{
+				"name":            strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
+				"result":          string(split[6][:2]),
+				"simulation":      simulationName,
+				"systemUnderTest": systemUnderTest,
+				"testEnvironment": testEnvironment,
+				"nodeName":        nodeName,
+			},
+			map[string]interface{}{
+				"userId":        int(userID),
+				"totalDuration": int(end - start),
+				"rawDuration":   int(rawDuration),
+			},
+			timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("Error creating new point with group data: %w", err)
+		}
 
-        point, err := influx.NewPoint(
-            "groups",
-            map[string]string{
-                "name":       strings.TrimSpace(strings.ReplaceAll(string(split[2]), " ", "_")),
-                "result":     string(split[6][:2]),
-                "simulation": simulationName,
-                "systemUnderTest": systemUnderTest,
-                "testEnvironment": testEnvironment,
-                "nodeName":   nodeName,
-            },
-            map[string]interface{}{
-                "userId":        int(userID),
-                "totalDuration": int(end - start),
-                "rawDuration":   int(rawDuration),
-            },
-            timestamp,
-        )
-        if err != nil {
-            return fmt.Errorf("Error creating new point with group data: %w", err)
-        }
-
-        influx.SendPoint(point)
-    }
+		influx.SendPoint(point)
+	}
 	return nil
 }
-
 
 // This method should be called first when parsing started as it is based
 // on information from the header row
@@ -460,7 +457,21 @@ func runLineProcess(lb []byte) error {
 		return err
 	}
 	gatlingVersion = string(split[5])
-
+	parts := strings.Split(gatlingVersion, ".")
+	if len(parts) > 2 {
+		major, err := strconv.Atoi(parts[0])
+		if err != nil {
+			return fmt.Errorf("failed to parse integer: %w", err)
+		}
+		minor, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return fmt.Errorf("failed to parse integer: %w", err)
+		}
+		isGatlingLogFormatV2 = major >= 3 && minor >= 5
+		l.Infof("Gatling log format version %d.%d.x (Gatling version at least 3.5.0: %v)", major, minor, isGatlingLogFormatV2)
+	} else {
+		return errors.New(fmt.Sprintf("Gatling version %s expected to have x.y.z format.", gatlingVersion))
+	}
 
 	// This will initialize required data for influx client
 	influx.InitTestInfo(systemUnderTest, testEnvironment, simulationName, description, nodeName, testStartTime)
@@ -468,11 +479,11 @@ func runLineProcess(lb []byte) error {
 	point, err := influx.NewPoint(
 		"tests",
 		map[string]string{
-			"action":     "start",
-			"simulation": simulationName,
-			"systemUnderTest":     systemUnderTest,
-			"testEnvironment":     testEnvironment,
-			"nodeName":   nodeName,
+			"action":          "start",
+			"simulation":      simulationName,
+			"systemUnderTest": systemUnderTest,
+			"testEnvironment": testEnvironment,
+			"nodeName":        nodeName,
 		},
 		map[string]interface{}{
 			"description": description,
@@ -501,10 +512,10 @@ func errorLineProcess(lb []byte) error {
 	point, err := influx.NewPoint(
 		"errors",
 		map[string]string{
-			"systemUnderTest":     systemUnderTest,
-			"testEnvironment":     testEnvironment,
-			"nodeName":   nodeName,
-			"simulation": simulationName,
+			"systemUnderTest": systemUnderTest,
+			"testEnvironment": testEnvironment,
+			"nodeName":        nodeName,
+			"simulation":      simulationName,
 		},
 		map[string]interface{}{
 			"errorMessage": string(split[1]),
