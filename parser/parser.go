@@ -121,13 +121,14 @@ func lookupTargetDir(ctx context.Context, dir string) error {
 }
 
 func walkFunc(path string, info os.FileInfo, err error) error {
-	if info.IsDir() && resultDirNamePattern.MatchString(info.Name()) {
-		dateString := resultDirNamePattern.FindStringSubmatch(info.Name())[1]
-		t, _ := time.Parse("20060102150405", dateString)
-		if t.Unix() > startTime {
-			logDir = path
-			l.Infof("Found log directory at %s", logDir)
 
+	if info.IsDir() && resultDirNamePattern.MatchString(info.Name()) {
+		// l.Debugf("Found directory '%s' with mod time %s", path, info.ModTime().String())
+		if info.ModTime().Unix() > startTime {
+			logDir = path
+			l.Infof("Log directory '%s' with mod time %s is newer than startTime %s", logDir,
+				info.ModTime().String(),
+				time.Unix(startTime, 0).String())
 			return errFound
 		}
 	}
@@ -137,9 +138,10 @@ func walkFunc(path string, info os.FileInfo, err error) error {
 
 // logic is the following: at the start of the application current timestamp is saved
 // then traversing over all directories inside target dir is initiated.
-// Every dir name is matched against pattern, if found - date time from dir name
-// is parsed and  result timestamp is matched against application start time.
-// Function stops as soon as matched date time is higher then initial one
+// Every dir name is matched against pattern, if found - modification time of directory is
+// compared with application start time.
+//
+// This function stops as soon as directory modification time is after start time.
 func lookupResultsDir(ctx context.Context, dir string) error {
 	const loopTimeout = 5 * time.Second
 
