@@ -123,12 +123,13 @@ func lookupTargetDir(ctx context.Context, dir string) error {
 func walkFunc(path string, info os.FileInfo, err error) error {
 
 	if info.IsDir() && resultDirNamePattern.MatchString(info.Name()) {
-		l.Debugf("Found directory '%s' with mod time %s", path, info.ModTime().String())
-		if info.ModTime().Unix() > startTime {
+		l.Debugf("Found directory '%s' with mod time %s (start time: %s)", path, info.ModTime().String(), time.Unix(startTime, 0).String())
+		startTimeMinusSlack := startTime - 60
+		if info.ModTime().Unix() > startTimeMinusSlack {
 			logDir = path
-			l.Infof("Log directory '%s' with mod time %s is newer than startTime %s", logDir,
+			l.Infof("Log directory '%s' with mod time %s is newer than start time minus slack %s", logDir,
 				info.ModTime().String(),
-				time.Unix(startTime, 0).String())
+				time.Unix(startTimeMinusSlack, 0).String())
 			return errFound
 		}
 	}
