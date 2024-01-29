@@ -103,7 +103,7 @@ Next will search for simulation.log file to appear and start processing it.`,
 	Long: `This application allows writing raw Gatling load testing
 tool logs directly to InfluxDB avoiding unnecessary
 complications of Graphite protocol.`,
-	Version: "v1.0.2",
+	Version: "v1.0.3",
 	PreRunE: preRunSetup,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
