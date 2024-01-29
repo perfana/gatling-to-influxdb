@@ -23,8 +23,8 @@ jobs:
 
       - name: Build
         run: |
-          GOOS=linux GOARCH=amd64 go build -o g2i g2i.go 
-          GOOS=linux GOARCH=arm64 go build -o g2i-arm64 g2i.go 
+          GOOS=linux GOARCH=amd64 go build -o g2i-linux-amd64 g2i.go 
+          GOOS=linux GOARCH=arm64 go build -o g2i-linux-arm64 g2i.go 
 
       - uses: olegtarasov/get-tag@v2.1.2
         id: tagName
@@ -33,6 +33,6 @@ jobs:
 
       - uses: ncipollo/release-action@v1
         with:
-          artifacts: "g2i,g2i-arm64"
+          artifacts: "g2i-*"
           body: "Release ${{ steps.tagName.outputs.tag }}"
 
