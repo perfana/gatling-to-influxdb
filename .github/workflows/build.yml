@@ -23,8 +23,8 @@ jobs:
 
       - name: Build
         run: |
-          GOOS=linux GOARCH=amd64 go build -o g2i-linux-amd64 g2i.go 
-          GOOS=linux GOARCH=arm64 go build -o g2i-linux-arm64 g2i.go 
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o g2i-linux-amd64 g2i.go 
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o g2i-linux-arm64 g2i.go 
           GOOS=windows GOARCH=386 go build -o g2i-windows-386.exe g2i.go
           GOOS=windows GOARCH=amd64 go build -o g2i-windows-amd64.exe g2i.go
           GOOS=darwin GOARCH=amd64 go build -o g2i-macos-amd64 g2i.go
