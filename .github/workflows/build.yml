@@ -30,7 +30,7 @@ jobs:
           GOOS=darwin GOARCH=amd64 go build -o g2i-macos-amd64 g2i.go
           GOOS=darwin GOARCH=arm64 go build -o g2i-macos-arm64 g2i.go
 
-      - uses: olegtarasov/get-tag@v2.1.2
+      - uses: olegtarasov/get-tag@v2.1.3
         id: tagName
         with:
           tagRegex: "g2i-(.*)"
