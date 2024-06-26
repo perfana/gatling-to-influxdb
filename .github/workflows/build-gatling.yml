@@ -1,11 +1,11 @@
 name: build g2i
 
 on:
-   push:
-     tags:
-       - g2i-*
+  push:
+    tags:
+      - g2i-*
 
-   workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -16,10 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.21.6
+          go-version: 1.22.4
 
       - name: Build
         run: |
@@ -32,10 +34,8 @@ jobs:
 
       - uses: olegtarasov/get-tag@v2.1.3
         id: tagName
-        with:
-          tagRegex: "g2i-(.*)"
 
-      - uses: ncipollo/release-action@v1
+      - uses: ncipollo/release-action@v1.14.0
         with:
           artifacts: "g2i-*"
           body: "Release ${{ steps.tagName.outputs.tag }}"
