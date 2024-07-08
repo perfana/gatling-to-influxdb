@@ -381,11 +381,12 @@ func InitInfluxConnection(cmd *cobra.Command) error {
 
 	var err error
 	c, err = infc.NewHTTPClient(infc.HTTPConfig{
-		Addr:      address,
-		Username:  username,
-		Password:  password,
-		UserAgent: fmt.Sprintf("g2i-http-client-%s(%s)", cmd.Version, runtime.Version()),
-		Timeout:   time.Second * 60,
+		Addr:          address,
+		Username:      username,
+		Password:      password,
+		UserAgent:     fmt.Sprintf("g2i-http-client-%s(%s)", cmd.Version, runtime.Version()),
+		Timeout:       time.Second * 60,
+		WriteEncoding: "gzip",
 	})
 	if err != nil {
 		return err
