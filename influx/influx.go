@@ -386,8 +386,7 @@ func InitInfluxConnection(cmd *cobra.Command) error {
 		Password:      password,
 		UserAgent:     fmt.Sprintf("g2i-http-client-%s(%s)", cmd.Version, runtime.Version()),
 		Timeout:       time.Second * 60,
-		WriteEncoding: "gzip",
-	})
+		WriteEncoding: "gzip"})
 	if err != nil {
 		return err
 	}
