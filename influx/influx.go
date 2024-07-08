@@ -42,7 +42,7 @@ type testInfo struct {
 	simulationName  string
 	description     string
 	nodeName        string
-	testStartTime  time.Time
+	testStartTime   time.Time
 }
 
 type userLineData struct {
@@ -64,7 +64,7 @@ var (
 	uc = make(chan userLineData, 1000)
 
 	// TODO: parameterize later
-	writeDataTimeout = 5
+	writeDataTimeout = 1
 )
 
 // InitTestInfo collect basic test information to be used by Influx client
@@ -72,10 +72,10 @@ func InitTestInfo(systemUnderTest, testEnvironment, simulationName, description,
 	info = testInfo{
 		systemUnderTest: systemUnderTest,
 		testEnvironment: testEnvironment,
-		simulationName: simulationName,
-		description:    description,
-		nodeName:       nodeName,
-		testStartTime:  testStartTime,
+		simulationName:  simulationName,
+		description:     description,
+		nodeName:        nodeName,
+		testStartTime:   testStartTime,
 	}
 }
 
@@ -138,10 +138,10 @@ func sendUserData(m map[string]int, ts time.Time) ([]*client.Point, error) {
 		point, err := client.NewPoint(
 			"users",
 			map[string]string{
-				"scenario": k,
-				"testEnvironment":   info.testEnvironment,
-				"systemUnderTest":   info.systemUnderTest,
-				"nodeName": info.nodeName,
+				"scenario":        k,
+				"testEnvironment": info.testEnvironment,
+				"systemUnderTest": info.systemUnderTest,
+				"nodeName":        info.nodeName,
 			},
 			map[string]interface{}{
 				"active": v,
@@ -321,11 +321,11 @@ func sendClosingPoint() {
 	p, _ := infc.NewPoint(
 		"tests",
 		map[string]string{
-			"action":     "end",
-			"simulation": info.simulationName,
-			"testEnvironment":     info.testEnvironment,
-			"systemUnderTest":     info.systemUnderTest,
-			"nodeName":   info.nodeName,
+			"action":          "end",
+			"simulation":      info.simulationName,
+			"testEnvironment": info.testEnvironment,
+			"systemUnderTest": info.systemUnderTest,
+			"nodeName":        info.nodeName,
 		},
 		map[string]interface{}{
 			"description": info.description,
@@ -390,7 +390,7 @@ func InitInfluxConnection(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-    //sleep for 15 seconds to allow influxdb to	start
+	//sleep for 15 seconds to allow influxdb to	start
 	time.Sleep(15 * time.Second)
 
 	_, _, err = c.Ping(time.Second * 10)
