@@ -139,6 +139,7 @@ func sendUserData(m map[string]int, ts time.Time) ([]*client.Point, error) {
 			"users",
 			map[string]string{
 				"scenario":        k,
+				"simulation":      info.simulationName,
 				"testEnvironment": info.testEnvironment,
 				"systemUnderTest": info.systemUnderTest,
 				"nodeName":        info.nodeName,
