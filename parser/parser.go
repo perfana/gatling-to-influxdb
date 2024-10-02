@@ -186,7 +186,8 @@ func waitForLog(ctx context.Context) error {
 		}
 
 		// WARNING: second part of this check may fail on Windows. Not tested
-		if fInfo.Mode().IsRegular() && (runtime.GOOS == "windows" || fInfo.Mode().Perm() == 420) {
+		/// Change logic to handle case when permission -rwe
+		if fInfo.Mode().IsRegular() && (runtime.GOOS == "windows" || fInfo.Mode().Perm() >= 420) {
 			abs, _ := filepath.Abs(logDir + "/" + simulationLogFileName)
 			l.Infof("Found %s\n", abs)
 			break
