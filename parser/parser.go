@@ -191,7 +191,6 @@ func waitForLog(ctx context.Context) error {
 			l.Infof("Found %s\n", abs)
 			break
 		}
-		l.Errorln("error hapens"+ err.Error())
 		return errors.New("Something wrong happened when attempting to open " + simulationLogFileName)
 	}
 
