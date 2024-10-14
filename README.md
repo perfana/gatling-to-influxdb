@@ -1,3 +1,6 @@
+> [!CAUTION]
+> This project has been archived, please use the new project that combines Gatling, K6 and jMeter parsing: https://github.com/perfana/x2i
+
 # gatling-to-influxdb
 
 ## Why
